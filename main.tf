@@ -188,6 +188,12 @@ resource "aws_iam_openid_connect_provider" "eks" {
   url             = data.aws_eks_cluster.devopsshack.identity[0].oidc[0].issuer
 }
 
+
+  depends_on = [
+    aws_eks_node_group.devopsshack
+  ]
+}
+
 resource "aws_iam_role" "vpc_cni_irsa_role" {
   name = "devopsshack-vpc-cni-irsa-role"
 
@@ -260,12 +266,6 @@ resource "aws_eks_addon" "ebs_csi" {
   addon_name               = "aws-ebs-csi-driver"
   resolve_conflicts_on_create = "OVERWRITE"
   service_account_role_arn = aws_iam_role.ebs_csi_irsa_role.arn
-
-  depends_on = [
-    aws_eks_node_group.devopsshack
-  ]
-}
-
 
   depends_on = [
     aws_eks_node_group.devopsshack
