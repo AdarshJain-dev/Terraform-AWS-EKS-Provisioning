@@ -2,9 +2,9 @@ provider "aws" {
   region = "us-east-1"
 }
 
-########################
+############################
 # VPC
-########################
+############################
 resource "aws_vpc" "devopsshack_vpc" {
   cidr_block = "10.0.0.0/16"
 
@@ -52,9 +52,9 @@ resource "aws_route_table_association" "a" {
   route_table_id = aws_route_table.devopsshack_route_table.id
 }
 
-########################
+############################
 # Security Groups
-########################
+############################
 resource "aws_security_group" "devopsshack_cluster_sg" {
   vpc_id = aws_vpc.devopsshack_vpc.id
 
@@ -92,9 +92,9 @@ resource "aws_security_group" "devopsshack_node_sg" {
   }
 }
 
-########################
-# IAM Roles
-########################
+############################
+# IAM ROLES
+############################
 resource "aws_iam_role" "devopsshack_cluster_role" {
   name = "devopsshack-cluster-role"
 
@@ -141,9 +141,9 @@ resource "aws_iam_role_policy_attachment" "ecr_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
-########################
-# EKS Cluster & Node Group
-########################
+############################
+# EKS CLUSTER
+############################
 resource "aws_eks_cluster" "devopsshack" {
   name     = "devopsshack-cluster"
   role_arn = aws_iam_role.devopsshack_cluster_role.arn
@@ -169,9 +169,9 @@ resource "aws_eks_node_group" "devopsshack" {
   instance_types = ["t2.medium"]
 }
 
-########################
-# OIDC Provider
-########################
+############################
+# OIDC
+############################
 data "aws_eks_cluster" "devopsshack" {
   name = aws_eks_cluster.devopsshack.name
 }
@@ -182,9 +182,17 @@ resource "aws_iam_openid_connect_provider" "eks" {
   thumbprint_list = ["9e99a48a9960b14926bb7f3b02e22da0ecdcc1d4"]
 }
 
-########################
-# VPC CNI Add-on (IRSA)
-########################
+locals {
+  oidc_provider = replace(
+    data.aws_eks_cluster.devopsshack.identity[0].oidc[0].issuer,
+    "https://",
+    ""
+  )
+}
+
+############################
+# VPC CNI ADDON (IRSA)
+############################
 resource "aws_iam_role" "vpc_cni_irsa_role" {
   name = "devopsshack-vpc-cni-irsa-role"
 
@@ -196,15 +204,14 @@ resource "aws_iam_role" "vpc_cni_irsa_role" {
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = {
-          "${replace(data.aws_eks_cluster.devopsshack.identity[0].oidc[0].issuer, "https://", "")}:sub" =
-          "system:serviceaccount:kube-system:aws-node"
+          "${local.oidc_provider}:sub" = "system:serviceaccount:kube-system:aws-node"
         }
       }
     }]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "vpc_cni_irsa_policy" {
+resource "aws_iam_role_policy_attachment" "vpc_cni_policy" {
   role       = aws_iam_role.vpc_cni_irsa_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
 }
@@ -216,9 +223,9 @@ resource "aws_eks_addon" "vpc_cni" {
   resolve_conflicts_on_create = "OVERWRITE"
 }
 
-########################
-# Core Add-ons
-########################
+############################
+# CORE ADDONS
+############################
 resource "aws_eks_addon" "coredns" {
   cluster_name = aws_eks_cluster.devopsshack.name
   addon_name   = "coredns"
@@ -231,9 +238,9 @@ resource "aws_eks_addon" "kube_proxy" {
   resolve_conflicts_on_create = "OVERWRITE"
 }
 
-########################
-# EBS CSI Driver (IRSA)
-########################
+############################
+# EBS CSI DRIVER (IRSA)
+############################
 resource "aws_iam_role" "ebs_csi_irsa_role" {
   name = "devopsshack-ebs-csi-irsa-role"
 
@@ -245,7 +252,7 @@ resource "aws_iam_role" "ebs_csi_irsa_role" {
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = {
-          "${replace(data.aws_eks_cluster.devopsshack.identity[0].oidc[0].issuer, "https://", "")}:sub" =
+          "${local.oidc_provider}:sub" =
           "system:serviceaccount:kube-system:ebs-csi-controller-sa"
         }
       }
